@@ -19,6 +19,12 @@ public class GlobalExceptionHandler {
         return ApiResponse.fail(ex.getMessage());
     }
 
+    /** 状态冲突（如通知正在投递中又点重发）：属正常并发拒绝，回友好提示，不当系统错误记日志。 */
+    @ExceptionHandler(IllegalStateException.class)
+    public ApiResponse<Void> handleIllegalState(IllegalStateException ex) {
+        return ApiResponse.fail(ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ApiResponse<Void> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
         FieldError fieldError = ex.getBindingResult().getFieldError();

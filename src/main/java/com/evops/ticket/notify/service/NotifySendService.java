@@ -183,7 +183,7 @@ public class NotifySendService {
         if (properties.isEmailAsync() && NotifyChannel.EMAIL.name().equals(record.getChannel())) {
             boolean accepted = emailExecutor.submit(() -> {
                 try {
-                    // 原子认领 PENDING→RETRYING：与定时兜底任务互斥，两者只有一方真正外呼
+                    // 原子认领 PENDING→SENDING：与定时兜底任务互斥，两者只有一方真正外呼
                     if (!store.claimFirstDelivery(record.getId(),
                             properties.getPendingFirstDeliverySeconds())) {
                         log.info("邮件首投已被其他执行方认领/状态已变，跳过避免重复发送 recordId={}",
@@ -191,12 +191,12 @@ public class NotifySendService {
                         return;
                     }
                     NotifyRecord fresh = store.getRecord(record.getId());
-                    if (fresh == null || !RecordStatus.RETRYING.name().equals(fresh.getStatus())) {
+                    if (fresh == null || !RecordStatus.SENDING.name().equals(fresh.getStatus())) {
                         return;
                     }
                     dispatch(fresh);
                 } catch (Exception e) {
-                    // 不外溢：外呼异常时记录仍由 PENDING/RETRYING 扫描兜底
+                    // 不外溢：外呼异常时记录仍由 PENDING/SENDING 扫描兜底
                     log.error("邮件异步首投异常 recordId={}", record.getId(), e);
                 } finally {
                     refreshDispatchSummary(record.getDispatchId());
@@ -209,12 +209,22 @@ public class NotifySendService {
             }
             return;
         }
-        dispatch(record);
+        // 同步通道（站内信即时投递 / email-async=false 的邮件）：同样先原子占用再投递，
+        // 用认领后库内重读的渲染快照，保证所有外呼口径一致、与并发重发互斥。
+        if (!store.claimFirstDelivery(record.getId(), properties.getPendingFirstDeliverySeconds())) {
+            log.info("记录已被其他执行方认领，跳过本次同步投递 recordId={}", record.getId());
+            return;
+        }
+        NotifyRecord fresh = store.getRecord(record.getId());
+        if (fresh != null && RecordStatus.SENDING.name().equals(fresh.getStatus())) {
+            dispatch(fresh);
+        }
     }
 
     /**
-     * 定时任务：① 兜底补发"PENDING 超时未首投"的邮件；② 扫描到期 RETRYING 记录续投。
-     * 两类处理完都刷新所属批次汇总。
+     * 定时任务：① 兜底补发"PENDING 超时未首投"的邮件；② 扫描到期 RETRYING 记录续投；
+     * ③ 回收认领后崩溃、租约过期仍停在 SENDING 的记录重新投递。
+     * 三类都先原子认领（CAS 占用为 SENDING）再投递，彼此及与人工重发互斥；处理完刷新所属批次汇总。
      */
     public int retryDue() {
         if (!properties.isEnabled()) {
@@ -244,26 +254,37 @@ public class NotifySendService {
             }
         }
 
-        // ② 退避到点的重试续投
-        List<NotifyRecord> due = store.dueRetry(properties.getRetryBatchSize());
-        for (NotifyRecord record : due) {
+        // ② 退避到点的重试续投；③ 认领后崩溃、租约过期的 SENDING 回收续投。二者用同一把认领锁。
+        List<NotifyRecord> candidates = new ArrayList<>(store.dueRetry(properties.getRetryBatchSize()));
+        candidates.addAll(store.stalledSending(properties.getRetryBatchSize()));
+        for (NotifyRecord record : candidates) {
             try {
-                dispatch(record);
-                if (record.getDispatchId() != null) {
+                // 原子认领续投：与人工重发、其它执行方互斥，只有一方真正外呼
+                if (!store.claimForRedelivery(record.getId(),
+                        properties.getPendingFirstDeliverySeconds())) {
+                    continue;
+                }
+                NotifyRecord fresh = store.getRecord(record.getId());
+                if (fresh != null) {
+                    dispatch(fresh);
                     dispatchIds.add(record.getDispatchId());
+                    processed++;
                 }
             } catch (Exception e) {
-                log.error("检票通知重试异常 recordId={}", record.getId(), e);
+                log.error("检票通知重试/崩溃回收异常 recordId={}", record.getId(), e);
             }
         }
-        processed += due.size();
         for (Long dispatchId : dispatchIds) {
             refreshDispatchSummary(dispatchId);
         }
         return processed;
     }
 
-    /** 人工重发：FAILED/RETRYING 记录立即再投一次；PENDING（异步首投尚未发出/池满排队）也可立即催投。 */
+    /**
+     * 人工重发：FAILED/RETRYING/SENDING(租约过期)/PENDING 立即再投一次。
+     * 所有状态都先经原子认领占用为 SENDING，抢占失败说明已有执行方在投递，直接提示而非再发一封，
+     * 保证邮件这种"无接收端幂等键"的通道也不会因人工操作产生重复邮件。
+     */
     public NotifyRecord manualRetry(Long recordId) {
         NotifyRecord record = store.getRecord(recordId);
         if (record == null) {
@@ -275,13 +296,29 @@ public class NotifySendService {
         if (RecordStatus.SKIPPED.name().equals(record.getStatus())) {
             throw new IllegalArgumentException("跳过发送的记录（收件人无该通道地址）不能重发，请先补全收件人");
         }
+
+        boolean claimed;
         if (RecordStatus.PENDING.name().equals(record.getStatus())) {
-            // 异步首投可能正在另一线程进行：原子认领，抢不到说明已被首投/定时兜底接管，不重复发信
-            if (!store.claimFirstDelivery(recordId, properties.getPendingFirstDeliverySeconds())) {
-                throw new IllegalStateException("该邮件正在首投中，请勿重复重发；稍后刷新查看结果");
-            }
-            record = store.getRecord(recordId);
+            // 异步首投可能正在另一线程进行：原子认领，抢不到说明已被首投/定时兜底接管
+            claimed = store.claimFirstDelivery(recordId, properties.getPendingFirstDeliverySeconds());
+        } else if (RecordStatus.RETRYING.name().equals(record.getStatus())) {
+            // 人工要求"立即"重发（runbook 允许）：先把退避时间清零，再原子认领；
+            // 若该行其实已被定时任务抢走进入 SENDING，放行 0 行、认领也失败，不会重复发
+            store.expediteRetry(recordId);
+            claimed = store.claimForRedelivery(recordId, properties.getPendingFirstDeliverySeconds());
+        } else {
+            // FAILED 随时可认领；SENDING 仅租约过期（投递线程崩溃）才可被回收，在途则失败
+            claimed = store.claimForRedelivery(recordId, properties.getPendingFirstDeliverySeconds());
         }
+        if (!claimed) {
+            throw new IllegalStateException("该通知正在发送中，请勿重复重发；稍后刷新查看结果");
+        }
+
+        record = store.getRecord(recordId);
+        if (record == null || !RecordStatus.SENDING.name().equals(record.getStatus())) {
+            throw new IllegalStateException("发送记录状态已变化，请刷新后重试");
+        }
+        // 用认领后从库内重读的渲染快照投递，杜绝把陈旧/他人上下文的对象发出去
         dispatch(record);
         refreshDispatchSummary(record.getDispatchId());
         return store.getRecord(recordId);
@@ -341,7 +378,9 @@ public class NotifySendService {
         boolean pending = false;
         for (List<String> statuses : byChannel.values()) {
             boolean hasUnfinished = statuses.stream().anyMatch(
-                    s -> RecordStatus.PENDING.name().equals(s) || RecordStatus.RETRYING.name().equals(s));
+                    s -> RecordStatus.PENDING.name().equals(s)
+                            || RecordStatus.SENDING.name().equals(s)
+                            || RecordStatus.RETRYING.name().equals(s));
             boolean hasFailed = statuses.contains(RecordStatus.FAILED.name());
             boolean hasSuccess = statuses.contains(RecordStatus.SUCCESS.name());
             boolean allSkipped = statuses.stream().allMatch(s -> RecordStatus.SKIPPED.name().equals(s));

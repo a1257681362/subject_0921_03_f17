@@ -96,13 +96,15 @@ class NotifyEmailAsyncTimingTest {
         List<NotifyRecord> emails = channel(records, "EMAIL");
         assertFalse(emails.isEmpty());
 
-        // 检票返回时：本地站内信已即时送达；慢邮件仍在外呼途中（PENDING 排队或已认领 RETRYING），绝无 SUCCESS
+        // 检票返回时：本地站内信已即时送达；慢邮件仍在外呼途中（PENDING 排队、或已被原子认领为
+        // SENDING 正在外呼、或已进入 RETRYING），绝无 SUCCESS
         assertTrue(inbox.stream().allMatch(r -> "SUCCESS".equals(r.getStatus())),
                 "站内信应在检票线程内即时成功，实际：" + statuses(inbox));
         assertTrue(emails.stream().noneMatch(r -> "SUCCESS".equals(r.getStatus())),
                 "检票返回时慢邮件不得已完成（接口被网关拖住），实际：" + statuses(emails));
         assertTrue(emails.stream().allMatch(r ->
-                "PENDING".equals(r.getStatus()) || "RETRYING".equals(r.getStatus())));
+                "PENDING".equals(r.getStatus()) || "SENDING".equals(r.getStatus())
+                        || "RETRYING".equals(r.getStatus())));
 
         // 放开慢网关，异步外呼收敛为 SUCCESS（最多等 5s）
         gate.countDown();

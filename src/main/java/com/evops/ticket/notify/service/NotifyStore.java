@@ -103,6 +103,18 @@ public class NotifyStore {
         return recordMapper.selectDueRetry(LocalDateTime.now(), limit);
     }
 
+    /** 在途崩溃兜底扫描：占用为 SENDING 但租约过期仍无结果的记录。 */
+    @Transactional(readOnly = true)
+    public List<NotifyRecord> stalledSending(int limit) {
+        return recordMapper.selectStalledSending(LocalDateTime.now(), limit);
+    }
+
+    /** 人工立即重发：把退避未到点的 RETRYING 行放行（清零退避时间），SENDING 在途行不受影响。 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public boolean expediteRetry(Long id) {
+        return recordMapper.expediteRetry(id, LocalDateTime.now()) == 1;
+    }
+
     /** 首投兜底扫描：PENDING 邮件超过时限仍未投递的（池满拒绝/线程异常/进程崩溃）。 */
     @Transactional(readOnly = true)
     public List<NotifyRecord> pendingFirstDelivery(int pendingSeconds, int limit) {
@@ -117,6 +129,16 @@ public class NotifyStore {
     public boolean claimFirstDelivery(Long id, int leaseSeconds) {
         LocalDateTime now = LocalDateTime.now();
         return recordMapper.claimFirstDelivery(id, now.plusSeconds(leaseSeconds), now) == 1;
+    }
+
+    /**
+     * 原子认领一次续投/人工重发（FAILED 或 退避到点的 RETRYING → 在途 RETRYING）。
+     * @return true 认领成功、本次可投递；false 已被其他执行方认领或退避未到点（本次不投递）
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public boolean claimForRedelivery(Long id, int leaseSeconds) {
+        LocalDateTime now = LocalDateTime.now();
+        return recordMapper.claimForRedelivery(id, now, now.plusSeconds(leaseSeconds)) == 1;
     }
 
     public NotifyRecordMapper recordMapper() {

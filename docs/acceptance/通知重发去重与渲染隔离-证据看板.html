@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>检票通知 渲染隔离 + 重发去重 修复证据看板</title>
+<style>
+  :root{--bg:#0f1420;--panel:#161d2e;--line:#2a3550;--fg:#dfe7f5;--mut:#8fa0c0;
+        --ok:#2ecc71;--bad:#ff6b6b;--warn:#ffb454;--accent:#5aa0ff;--tag:#223052;}
+  *{box-sizing:border-box}
+  body{margin:0;background:#0b0f1a;color:var(--fg);
+       font-family:"PingFang SC","Microsoft YaHei","Noto Sans CJK SC","Source Han Sans SC",sans-serif;
+       line-height:1.6;padding:28px 22px 60px;}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:24px;margin:0 0 6px}
+  .sub{color:var(--mut);font-size:13px;margin-bottom:22px}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 26px}
+  .chip{background:var(--tag);border:1px solid var(--line);border-radius:14px;padding:3px 12px;font-size:12px;color:#cdd9f2}
+  .shot{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin:0 0 26px;overflow:hidden;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+  .bar{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);background:#12192a}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .r{background:#ff5f57}.y{background:#febc2e}.g{background:#28c840}
+  .url{color:var(--mut);font-size:12px;margin-left:8px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .body{padding:16px 18px}
+  .anno{background:#10243a;border-left:4px solid var(--accent);color:#bcd6ff;font-size:13px;
+        padding:10px 14px;border-radius:0 8px 8px 0;margin:0 0 14px}
+  pre{margin:0;font-family:ui-monospace,Menlo,Consolas,"Courier New",monospace;font-size:13px;
+      white-space:pre-wrap;word-break:break-all;color:#e8eefc}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left}
+  th{background:#1b2740;color:#cfe0ff;font-weight:600}
+  .st{font-weight:700;border-radius:6px;padding:2px 9px;font-size:12px;display:inline-block}
+  .sending{background:rgba(255,180,84,.16);color:var(--warn);border:1px solid var(--warn)}
+  .success{background:rgba(46,204,113,.15);color:var(--ok);border:1px solid var(--ok)}
+  .reject{background:rgba(255,107,107,.14);color:var(--bad);border:1px solid var(--bad)}
+  .big{font-size:30px;font-weight:800;color:var(--ok)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .kpi{background:#101728;border:1px solid var(--line);border-radius:10px;padding:16px}
+  .kpi .n{font-size:34px;font-weight:800}
+  .kpi .l{color:var(--mut);font-size:12.5px;margin-top:4px}
+  .ok-t{color:var(--ok)}.bad-t{color:var(--bad)}
+  .step{display:inline-block;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;
+        text-align:center;line-height:22px;font-size:12px;margin-right:8px;font-weight:700}
+  .h{font-size:16px;font-weight:700;margin:0 0 12px}
+  .note{color:var(--mut);font-size:12px;margin-top:8px}
+  .pill{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0c1322;border:1px solid var(--line);
+        border-radius:6px;padding:1px 7px;font-size:12px;color:#cfe0ff}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>检票通知 ·「渲染隔离 + 重发去重」修复证据看板</h1>
+  <div class="sub">场馆票务 EVOPS / notify-1 出站外发并发安全 · 修复后现场复现（真实接口 + 慢邮件网关），非示意</div>
+  <div class="meta">
+    <span class="chip">票号 TSH002000000002</span>
+    <span class="chip">场次 SH002《天鹅湖·芭蕾经典》</span>
+    <span class="chip">检票人 ticket_check01</span>
+    <span class="chip">邮件 email-async=true</span>
+    <span class="chip">慢网关延迟 4s（制造在途窗口）</span>
+    <span class="chip">2026-09-26 12:03</span>
+  </div>
+
+  <div class="shot">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="url">POST /api/ticket/tickets/TSH002000000002/check</span></div>
+    <div class="body">
+      <div class="h"><span class="step">1</span>检票成功，触发双通道通知</div>
+      <div class="anno">检票 SOLD→CHECKED 落库（requestId=EVD-RED-001），事务提交后按事件生成「2 收件人 × 2 通道 = 4 条」发送记录。</div>
+      <pre>{
+  "success": true, "message": "OK",
+  "data": {
+    "ticketNo": "TSH002000000002", "orderNo": "SO202609222010416D05",
+    "sessionCode": "SH002", "showName": "天鹅湖·芭蕾经典",
+    "venue": "滨江大剧院", "area": "VIP包厢", "rowNo": "01", "seatNo": "02",
+    "price": 880.0, "status": "CHECKED", "operator": "ticket_check01"
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="shot">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="url">GET /api/ticket/notify/records?ticketNo=TSH002000000002 （检票后 0.6 秒）</span></div>
+    <div class="body">
+      <div class="h"><span class="step">2</span>慢网关下：站内信已送达，邮件正“在途”被唯一投递方占用</div>
+      <div class="anno">新增的 <b>SENDING（投递中）</b> 占用态是本次修复核心：一条记录任一时刻只允许一个执行方外呼。
+      旧代码没有在途态，定时续投/人工重发可与在途首投并发，邮件会被发出多封。</div>
+      <table>
+        <tr><th>记录 id</th><th>通道</th><th>收件人</th><th>此刻状态</th></tr>
+        <tr><td>1</td><td>INBOX</td><td>周洋（前场场务）</td><td><span class="st success">SUCCESS</span></td></tr>
+        <tr><td>2</td><td>INBOX</td><td>王芳（值班经理）</td><td><span class="st success">SUCCESS</span></td></tr>
+        <tr><td>3</td><td>EMAIL</td><td>周洋</td><td><span class="st sending">SENDING</span></td></tr>
+        <tr><td>4</td><td>EMAIL</td><td>王芳</td><td><span class="st sending">SENDING</span></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="shot">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="url">POST /api/ticket/notify/records/4/retry （在途 4 秒窗口内点击“手动重发”）</span></div>
+    <div class="body">
+      <div class="h"><span class="step">3</span>在途重发被原子去重拦截 —— 不会再发一封</div>
+      <div class="anno">服务端用 <span class="pill">UPDATE … WHERE status IN (FAILED / 退避到期 RETRYING / 租约过期 SENDING)</span>
+      做 CAS 认领；记录正处于在途 SENDING（租约未到期），更新 0 行 → 认领失败，直接给客服友好提示，<b>不触发第二次外呼</b>。</div>
+      <pre>{
+  "success": <span class="bad-t">false</span>,
+  "message": "<span class="bad-t">该通知正在发送中，请勿重复重发；稍后刷新查看结果</span>",
+  "data": null
+}</pre>
+      <div class="note">同一时刻触发的定时兜底任务同样扫不到这条在途记录（租约未到期），双重去重。</div>
+    </div>
+  </div>
+
+  <div class="shot">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="url">慢邮件网关 4 秒后回执 OK —— 核对实际投递数</span></div>
+    <div class="body">
+      <div class="h"><span class="step">4</span>去重红线：网关实际只收到 <b>2 封</b>（每位收件人 1 封），不是 3 封</div>
+      <div class="grid2">
+        <div class="kpi"><div class="n ok-t">2</div><div class="l">网关实际收到邮件（周洋 1 + 王芳 1）</div></div>
+        <div class="kpi"><div class="n bad-t">0</div><div class="l">在途重发造成的重复邮件（被 CAS 拦截）</div></div>
+      </div>
+      <table style="margin-top:14px">
+        <tr><th>#</th><th>收件地址</th><th>业务键(bizKey)</th><th>邮件标题</th></tr>
+        <tr><td>1</td><td>zhouyang.stage@example.cn</td><td>TSH002000000002</td>
+            <td>【滨江大剧院检票通知】天鹅湖·芭蕾经典 TSH002000000002 已于 … 检票</td></tr>
+        <tr><td>2</td><td>wangfang.manager@example.cn</td><td>TSH002000000002</td>
+            <td>【滨江大剧院检票通知】天鹅湖·芭蕾经典 TSH002000000002 已于 … 检票</td></tr>
+      </table>
+      <div class="note">4 条发送记录最终全部 SUCCESS；在途重发没有产生第 3 封。</div>
+    </div>
+  </div>
+
+  <div class="shot">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="url">GET /api/ticket/notify/records/4 （发送记录详情 = 外呼当刻快照）</span></div>
+    <div class="body">
+      <div class="h"><span class="step">5</span>渲染隔离：真正外呼只用“本记录库内快照”，票号/称呼不串</div>
+      <div class="anno">修复后所有投递（同步/异步/重发/兜底）都在 CAS 认领成功后<b>从库内重读该记录的渲染快照</b>再发，
+      不使用调用链里可能陈旧或被串改的内存对象 —— 从根上杜绝“称呼是别人名字、票号对不上”。</div>
+      <pre>标题（渲染快照）: 【滨江大剧院检票通知】天鹅湖·芭蕾经典 <b>TSH002000000002</b> 已于 2026-09-26 12:03:09 检票
+
+正文（渲染快照，节选自库内 content_rendered）:
+  演出名称：天鹅湖·芭蕾经典
+  场次编号：SH002（开演 2026-09-25 19:30:00）
+  场馆：滨江大剧院
+  座位：VIP包厢 01排02座
+  <b>票号：TSH002000000002</b>
+  订单号：SO202609222010416D05
+  检票人：ticket_check01
+
+变量集快照 vars_snapshot:
+  {"ticketNo":"TSH002000000002","orderNo":"SO202609222010416D05",
+   "showName":"天鹅湖·芭蕾经典","sessionCode":"SH002","venue":"滨江大剧院",
+   "area":"VIP包厢","rowNo":"01","seatNo":"02","price":"880.00", ...}</pre>
+    </div>
+  </div>
+
+  <div class="shot">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="url">H2 真实数据库 · CAS 认领 SQL 并发断言（17/17 通过）</span></div>
+    <div class="body">
+      <div class="h"><span class="step">6</span>用与生产一致的 H2 + 完全相同的 CAS SQL 做并发/认领验证</div>
+      <pre>PASS  A 并发8路认领FAILED 恰好1方成功(去重)      PASS  A 胜出行占用为SENDING
+PASS  B 在途记录再认领被拒(不重发)                PASS  B 人工放行(expedite)抢不走在途SENDING
+PASS  B 定时续投扫描不命中在途                    PASS  B 崩溃扫描不命中租约未到期
+PASS  C 租约过期的SENDING被崩溃扫描命中           PASS  C 崩溃记录可重新认领续投
+PASS  D 退避未到点定时不续投                      PASS  D 人工立即重发放行成功
+PASS  E PENDING首投认领成功/再认领失败            PASS  F SUCCESS不可认领
+<span class="ok-t">RESULT pass=17 fail=0</span></pre>
+    </div>
+  </div>
+
+  <div class="note" style="font-size:12.5px">
+    复现方式：本看板为离线环境用修复后类实际启动应用（全新 H2 库、指向 4 秒延迟的慢邮件网关）真实调用所得；
+    原始 JSON 见同目录 <span class="pill">01_…06_*.json</span> 与 <span class="pill">00_h2_cas_assertions.txt</span>，
+    采集脚本 <span class="pill">cap.sh</span>。浏览器打开本文件即可见中文（使用本机字体）。
+  </div>
+</div>
+</body>
+</html>

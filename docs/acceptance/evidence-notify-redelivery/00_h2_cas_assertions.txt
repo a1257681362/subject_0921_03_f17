@@ -1,0 +1,19 @@
+PASS  A 并发8路认领FAILED 恰好1方成功(去重)
+PASS  A 胜出行占用为SENDING
+PASS  B 在途记录再认领被拒(不重发)
+PASS  B 人工放行(expedite)抢不走在途SENDING
+PASS  B 定时续投扫描不命中在途
+PASS  B 崩溃扫描不命中租约未到期
+PASS  C 租约过期的SENDING被崩溃扫描命中
+PASS  C 崩溃记录可重新认领续投
+PASS  C 重新认领后状态SENDING
+PASS  D 退避未到点定时不续投
+PASS  D 直接认领未到点RETRYING被拒
+PASS  D 人工立即重发放行成功
+PASS  D 放行后可原子认领
+PASS  E PENDING首投认领成功
+PASS  E 认领后为SENDING
+PASS  E 再次首投认领失败(防并发重复)
+PASS  F SUCCESS不可认领
+
+RESULT pass=17 fail=0
