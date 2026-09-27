@@ -1,0 +1,1 @@
+{"success":true,"message":"OK","data":{"eventCode":"TICKET_CHECK","totalDispatches":7,"successDispatches":6,"partialDispatches":1,"failedDispatches":0,"channels":{"EMAIL":{"SUCCESS":13,"FAILED":1,"RETRYING":0,"SKIPPED":4,"TOTAL":18},"INBOX":{"SUCCESS":18,"FAILED":0,"RETRYING":0,"SKIPPED":0,"TOTAL":18}}}}

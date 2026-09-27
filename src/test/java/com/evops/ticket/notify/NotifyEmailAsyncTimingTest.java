@@ -42,7 +42,10 @@ import static org.mockito.Mockito.when;
 @SpringBootTest(properties = {
         "evops.notify.email-async=true",
         "evops.notify.email-pool-size=2",
-        "evops.notify.pending-first-delivery-seconds=2"
+        // 首投兜底时限必须严格大于单次外呼超时上限（测试环境 connect+read=2000ms），
+        // 否则 NotifyProperties 启动校验拒绝加载上下文；取最小合法值 3s，
+        // 兜底用例把 create_time 回拨 30s，3s 阈值不影响用例时效
+        "evops.notify.pending-first-delivery-seconds=3"
 })
 class NotifyEmailAsyncTimingTest {
 
