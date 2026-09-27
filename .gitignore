@@ -1,0 +1,8 @@
+target/
+data/
+.idea/
+*.iml
+*.log
+.env
+*.local
+app.pid

@@ -1,0 +1,40 @@
+{
+  "success": true,
+  "message": "OK",
+  "data": {
+    "page": 1,
+    "size": 1,
+    "total": 2,
+    "list": [
+      {
+        "id": 8,
+        "dispatchId": 2,
+        "eventCode": "TICKET_CHECK",
+        "channel": "EMAIL",
+        "templateId": 2,
+        "templateVersion": 2,
+        "recipientId": 2,
+        "recipientName": "王芳",
+        "recipientAddress": "wangfang.manager@example.cn",
+        "ticketNo": "TSH002000000002",
+        "orderNo": "SO202609222010416D05",
+        "sessionCode": "SH002",
+        "titleRendered": "【v2新版文案】滨江大剧院检票播报：TSH002000000002 2026-09-23 16:25:08",
+        "contentRendered": "场务值守播报（新版）：\n观众已于 2026-09-23 16:25:08 持票 TSH002000000002 入场。\n座位：VIP包厢 01排02座，请引导对号入座。\n演出：天鹅湖·芭蕾经典（SH002）",
+        "varsSnapshot": "{\"ticketNo\":\"TSH002000000002\",\"orderNo\":\"SO202609222010416D05\",\"showName\":\"天鹅湖·芭蕾经典\",\"sessionCode\":\"SH002\",\"venue\":\"滨江大剧院\",\"area\":\"VIP包厢\",\"rowNo\":\"01\",\"seatNo\":\"02\",\"price\":\"880.00\",\"checkTime\":\"2026-09-23 16:25:08\",\"showTime\":\"2026-09-25 19:30:00\",\"operator\":\"ticket_check01\",\"reason\":\"第二位观众入场\"}",
+        "messageId": "MID-BC7CFB65EBBC4880",
+        "httpStatus": 200,
+        "status": "SUCCESS",
+        "retryCount": 0,
+        "maxRetry": 2,
+        "nextRetryTime": null,
+        "lastError": null,
+        "operator": "ticket_check01",
+        "requestId": "a7c8ca0f8845431192adba7b66118337",
+        "bizTime": "2026-09-23T16:25:08.73",
+        "createTime": "2026-09-23T16:25:08.798",
+        "sentTime": "2026-09-23T16:25:08.807"
+      }
+    ]
+  }
+}

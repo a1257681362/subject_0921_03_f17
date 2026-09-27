@@ -1,0 +1,19 @@
+{
+  "success": true,
+  "message": "OK",
+  "data": {
+    "id": 2,
+    "templateCode": "CHECK_STAGE",
+    "templateName": "检票节点-场务通知",
+    "eventCode": "TICKET_CHECK",
+    "channel": "EMAIL",
+    "titleTemplate": "【v2新版文案】${venue}检票播报：${ticketNo} ${checkTime}",
+    "bodyTemplate": "场务值守播报（新版）：\n观众已于 ${checkTime} 持票 ${ticketNo} 入场。\n座位：${area} ${rowNo}排${seatNo}座，请引导对号入座。\n演出：${showName}（${sessionCode}）",
+    "enabled": 1,
+    "templateVersion": 2,
+    "status": "ACTIVE",
+    "remark": "验收演示：模板改版",
+    "operator": "venue_admin",
+    "updateTime": "2026-09-23T16:24:07.798"
+  }
+}

@@ -1,0 +1,37 @@
+==============================================================
+ 修复后实测流水（真实启动 evops-base，H2 文件库，端口18082）
+ 时间：2026-09-25 00:04:10 UTC  JDK：openjdk version "1.8.0_504"
+==============================================================
+
+## 场景一：刷新轮换后旧访问令牌立即作废
+POST /api/auth/login                         -> HTTP 200 登录成功，取得 access(A1)+refresh(R1)
+GET  /api/auth/me  [A1 刷新前]               -> HTTP 200  旧access有效
+POST /api/auth/refresh [R1]                  -> HTTP 200 轮换成功，取得新 access(A2)+refresh(R2)
+GET  /api/auth/me  [A1 刷新后★]             -> HTTP 401  旧access立即失效（修复前此处为200）
+GET  /api/auth/me  [A2 新令牌]              -> HTTP 200  新access正常
+POST /api/auth/refresh [R2]                  -> HTTP 200 第二次轮换成功(A3)
+GET  /api/auth/me  [A2 第二次轮换后★]       -> HTTP 401  上一代access同样立即失效
+GET  /api/auth/me  [A3 最新]                -> HTTP 200
+POST /api/auth/refresh [R1 重放]             -> HTTP 401  旧refresh重放被拒
+POST /api/auth/refresh [R2 连坐]             -> HTTP 401  同家族refresh连坐撤销
+
+## 场景二：两台设备（两个家族）互不影响
+设备1轮换后 GET /me [设备1旧access]           -> HTTP 401 (401)
+设备1轮换后 GET /me [设备2 access]            -> HTTP 200 (200) 设备2不受影响
+设备2 POST /refresh [设备2 refresh]           -> HTTP 200 (200) 设备2正常轮换
+
+## 场景三：ADMIN 停用/启用账号
+停用前 GET /me [被停用账号access]             -> HTTP 200 (200)
+POST /api/admin/rbac/users/3/disable [ADMIN]  -> HTTP 200 (200)
+停用后 GET /me [旧access]★                   -> HTTP 401 (401) 账号不可用
+停用后 POST /refresh [旧refresh]★            -> HTTP 401 (401)
+停用期间 POST /login [正确密码]★             -> HTTP 401 (401) 账号已停用
+非ADMIN POST .../disable [售票员]             -> HTTP 403 (403) 需要 rbac:manage
+ADMIN 停用自己                                -> HTTP 200 success=false（防自锁，账号仍ACTIVE）
+{"success":false,"message":"不能停用当前登录账号（防止自锁）","data":null}
+POST .../enable [ADMIN]                       -> HTTP 200 (200)
+启用后 GET /me [停用前旧access]★             -> HTTP 401 (401) tv已推进，旧令牌不复活
+启用后 POST /refresh [停用前旧refresh]★       -> HTTP 401 (401) 旧refresh已撤销
+启用后 POST /login [重新登录]                 -> HTTP 200 (200) 必须用密码重登
+重登后 GET /me [新access]                     -> HTTP 200 (200)
+重登后 POST /refresh [新refresh]              -> HTTP 200 (200)

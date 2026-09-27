@@ -1,0 +1,33 @@
+{
+  "success": true,
+  "message": "OK",
+  "data": {
+    "id": 11,
+    "dispatchId": 3,
+    "eventCode": "TICKET_CHECK",
+    "channel": "EMAIL",
+    "templateId": 2,
+    "templateVersion": 2,
+    "recipientId": 1,
+    "recipientName": "周洋",
+    "recipientAddress": "zhouyang.stage@example.cn",
+    "ticketNo": "TSH001000000001",
+    "orderNo": "SO202609181022057F3A",
+    "sessionCode": "SH001",
+    "titleRendered": "【v2新版文案】滨江大剧院检票播报：TSH001000000001 2026-09-23 16:25:09",
+    "contentRendered": "场务值守播报（新版）：\n观众已于 2026-09-23 16:25:09 持票 TSH001000000001 入场。\n座位：一层池座 01排01座，请引导对号入座。\n演出：山河令·民乐音乐会（SH001）",
+    "varsSnapshot": "{\"ticketNo\":\"TSH001000000001\",\"orderNo\":\"SO202609181022057F3A\",\"showName\":\"山河令·民乐音乐会\",\"sessionCode\":\"SH001\",\"venue\":\"滨江大剧院\",\"area\":\"一层池座\",\"rowNo\":\"01\",\"seatNo\":\"01\",\"price\":\"380.00\",\"checkTime\":\"2026-09-23 16:25:09\",\"showTime\":\"2026-09-22 19:30:00\",\"operator\":\"ticket_check01\",\"reason\":\"开演前核验-故障演练\"}",
+    "messageId": "MID-88F07080514E4385",
+    "httpStatus": 200,
+    "status": "SUCCESS",
+    "retryCount": 2,
+    "maxRetry": 2,
+    "nextRetryTime": "2026-09-23T16:26:20.012",
+    "lastError": "邮件网关 HTTP 500：{\"code\":\"GATEWAY_ERROR\",\"message\":\"模拟网关故障 HTTP 500\"}",
+    "operator": "ticket_check01",
+    "requestId": "630f0715044048b99d2d377f586eaa3d",
+    "bizTime": "2026-09-23T16:25:09.928",
+    "createTime": "2026-09-23T16:25:10.014",
+    "sentTime": "2026-09-23T16:27:01.209"
+  }
+}

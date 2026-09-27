@@ -1,0 +1,148 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: evops-base
+  profiles:
+    active: dev
+  autoconfigure:
+    exclude:
+      # 该配置注册 JDK 动态代理的 APC，会使具体 Service 类注入失败；项目未使用 Shiro 方法注解，直接排除
+      - org.apache.shiro.spring.boot.autoconfigure.ShiroAnnotationProcessorAutoConfiguration
+  jackson:
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+  datasource:
+    url: jdbc:h2:file:./data/evops;AUTO_SERVER=TRUE;LOCK_TIMEOUT=10000
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: false
+  # ---- Schema 变更管理（Flyway 接管，2026-09 并跑期）----
+  # Flyway：版本脚本在 classpath:db/migration 下按 V 号顺序执行。
+  # 旧库（只有 t_evops_schema_version、无 flyway_schema_history）首飞：
+  #   baseline-on-migrate 把 V1 记为基线（不重放 V1 全量脚本），从 V2 起增量执行；
+  # 新库：V1 -> V2 从头完整执行，一键建到最新。
+  # 并跑两天确认台账数字一致后切断旧逻辑：SPRING_SQL_INIT_MODE=never（或下线 schema.sql）。
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 1
+    baseline-description: EVOPS 现有库基线（base/ticket/auth/checkin/agent）
+    validate-on-migrate: true
+    table: flyway_schema_history
+  # 旧初始化逻辑并跑保留：schema.sql 全部为 IF NOT EXISTS/MERGE 幂等语句，
+  # 在 Flyway 之后执行（Spring Boot 保证 sql.init 晚于 Flyway），结构已在则空转，
+  # 仅旧台账 t_evops_schema_version 与 Flyway 双写，供启动对账。切旧时置 never。
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+  # 票附件上传（客服支持）：单文件/单请求大小上限；业务层 evops.attachment.max-upload-size 再兜底一道
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.evops
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-not-delete-value: 0
+      logic-delete-value: 1
+
+# 场馆后台 JWT 双令牌认证（整改要求 auth-1）
+evops:
+  # Flyway 接管过渡：新旧台账并跑对账（数字对得上再切旧逻辑）
+  schema:
+    reconcile-enabled: true
+    # 演练/CI 环境可置 true 强卡启动；现场默认只告警不阻断
+    fail-on-mismatch: ${EVOPS_SCHEMA_FAIL_ON_MISMATCH:false}
+  auth:
+    # 签名密钥为演示环境固定值；生产部署必须通过环境变量 EVOPS_AUTH_SECRET 覆盖（>=32 字节）
+    secret: ${EVOPS_AUTH_SECRET:evops-demo-jwt-secret-please-change-2026}
+    # 访问令牌：有效期短（15 分钟），只在黑名单按 jti 兜底吊销
+    access-token-ttl-seconds: 900
+    # 刷新令牌：7 天，服务端 t_refresh_token 存证；每次刷新轮换、一次性使用
+    refresh-token-ttl-seconds: 604800
+    issuer: evops-venue-admin
+
+  # 代理售票平台 XML 对接（agent-1）
+  agent:
+    # 总开关：false 时业务仅落 PENDING 归档不实际投递，待平台排期就绪后打开
+    enabled: ${EVOPS_AGENT_ENABLED:true}
+    # 平台收票地址；联调/排期未定时可指向桩或留空由定时任务暂存
+    endpoint: ${EVOPS_AGENT_ENDPOINT:http://localhost:8080/agent-stub/ticket}
+    venue-code: VENUE
+    connect-timeout-ms: 3000
+    read-timeout-ms: 5000
+    # 出站失败退避重试：最多 5 次，基数 30s 指数退避，上限 30min，耗尽置 FAILED 人工重发
+    max-retry: 5
+    base-backoff-seconds: 30
+    max-backoff-seconds: 1800
+    retry-batch-size: 100
+
+  # 检票关键节点通知场务（notify-1）
+  notify:
+    # 总开关：false 时检票事件不触发任何通知
+    enabled: ${EVOPS_NOTIFY_ENABLED:true}
+    # 站内信/邮件双通道独立开关
+    inbox-enabled: ${EVOPS_NOTIFY_INBOX:true}
+    email-enabled: ${EVOPS_NOTIFY_EMAIL:true}
+    # 邮件 HTTP 网关（演示走内置 /mail-stub；真实部署配企业邮件出口网关）
+    email-endpoint: ${EVOPS_NOTIFY_EMAIL_ENDPOINT:http://localhost:8080/mail-stub/send}
+    mail-from: evops-venue@example.cn
+    connect-timeout-ms: 3000
+    read-timeout-ms: 5000
+    # 验收口径：首发失败后再重试 2 次（共投递 3 次），耗尽置 FAILED 可人工重发
+    max-retry: 2
+    base-backoff-seconds: 10
+    max-backoff-seconds: 300
+    retry-batch-size: 100
+    # 邮件外呼异步化：检票提交后站内信当前线程即时达，邮件交独立线程池外呼，
+    # 检票接口不再被邮件网关超时拖住；false 立即切回同步外呼旧行为（预案开关）
+    email-async: ${EVOPS_NOTIFY_EMAIL_ASYNC:true}
+    email-pool-size: ${EVOPS_NOTIFY_EMAIL_POOL_SIZE:2}
+    # 首投兜底时限：PENDING 邮件超过该秒数仍未投递，由每分钟任务补做首投
+    # （必须 > connect+read 单次外呼上限 8s）
+    pending-first-delivery-seconds: ${EVOPS_NOTIFY_PENDING_FIRST_DELIVERY_SECONDS:90}
+
+  # 演出票附件（客服整批下载，ticket-2）
+  attachment:
+    # 附件二进制受管目录；原始中文名只存库，落盘一律用服务端 UUID 存储名（防路径穿越）
+    storage-dir: ${EVOPS_ATTACHMENT_DIR:./data/attachments}
+    # 单个 ZIP 包最多包含的票号数（例会敲定：单包上限 50 份，硬上限 50，调小不允许调大）
+    zip-max-tickets: ${EVOPS_ATTACHMENT_ZIP_MAX:50}
+    # 单附件大小上限（容器 multipart 限制之外的业务兜底）
+    max-upload-size: 20MB
+
+  # 检票数据出系统统一脱敏（mask-1，Flyway V5）
+  mask:
+    # 检票预约单据单次导出 CSV 行数上限（硬上限 5000，只能调小；超限在响应流打开前拒绝）
+    export-max-rows: ${EVOPS_MASK_EXPORT_MAX:5000}
+
+  # 检票备注敏感词扫描（sensitive-1，Flyway V7）
+  sensitive:
+    # 总开关：false 立即完全切回不扫描的旧检票逻辑（预案开关，无需改代码）
+    enabled: ${EVOPS_SENSITIVE_ENABLED:true}
+    # 扫描/留痕链路自身异常时按原文放行（一出异常立即切回旧逻辑，不挡现场检票）；
+    # 演练强卡可置 false
+    fail-open: ${EVOPS_SENSITIVE_FAIL_OPEN:true}
+    # 代理平台入站报文是否扫描：默认豁免（非人工输入，误拦会导致平台同步失败）
+    scan-agent-inbound: ${EVOPS_SENSITIVE_SCAN_AGENT:false}
+    # 低危命中的打码字符（逐码点替换命中片段）
+    mask-char: "*"
+
+logging:
+  level:
+    com.evops: INFO

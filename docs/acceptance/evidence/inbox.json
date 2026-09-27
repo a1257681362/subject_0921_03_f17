@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "message": "OK",
+  "data": {
+    "page": 1,
+    "size": 5,
+    "total": 1,
+    "list": [
+      {
+        "id": 1,
+        "staffNo": "stage01",
+        "recipientName": "周洋",
+        "title": "【检票提醒】天鹅湖·芭蕾经典 TSH002000000001 已检票入场",
+        "content": "场务您好：\n2026-09-23 16:25:06 有观众检票入场，请关注现场秩序与座次引导。\n演出：天鹅湖·芭蕾经典（场次 SH002），开演时间 2026-09-25 19:30:00\n场馆：滨江大剧院\n座位：VIP包厢 01排01座\n票号：TSH002000000001　订单号：SO202609222010416D05\n检票人：ticket_check01　备注：入场检票-开演前核验",
+        "category": "TICKET_CHECK",
+        "bizKey": "TSH002000000001",
+        "readFlag": 0,
+        "readTime": null,
+        "recordId": 1,
+        "createTime": "2026-09-23T16:25:06.274"
+      }
+    ]
+  }
+}

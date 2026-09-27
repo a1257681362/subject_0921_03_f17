@@ -1,0 +1,53 @@
+{
+  "success": true,
+  "message": "OK",
+  "data": {
+    "id": 10,
+    "ticketNo": "TSH002000000001",
+    "orderId": 5,
+    "orderNo": "SO202609222010416D05",
+    "sessionId": 2,
+    "showName": "天鹅湖·芭蕾经典",
+    "sessionCode": "SH002",
+    "showTime": "2026-09-25T19:30:00",
+    "seatId": 23,
+    "venue": "滨江大剧院",
+    "area": "VIP包厢",
+    "rowNo": "01",
+    "seatNo": "01",
+    "price": 880.0,
+    "status": "CHECKED",
+    "operator": "ticket_check01",
+    "requestId": "87efdf4506904fa49c7b13a304d9e414",
+    "bizTime": "2026-09-23T16:25:06.15",
+    "version": 1,
+    "flows": [
+      {
+        "id": 10,
+        "recordType": "ISSUE",
+        "reverseFlag": 0,
+        "originRecordId": null,
+        "fromStatus": null,
+        "toStatus": "SOLD",
+        "reason": "售票出票",
+        "operator": "box_office01",
+        "requestId": "REQ20260922033",
+        "bizTime": "2026-09-22T20:10:41",
+        "createTime": "2026-09-22T20:10:41"
+      },
+      {
+        "id": 16,
+        "recordType": "CHECK",
+        "reverseFlag": 0,
+        "originRecordId": 10,
+        "fromStatus": "SOLD",
+        "toStatus": "CHECKED",
+        "reason": "入场检票-开演前核验",
+        "operator": "ticket_check01",
+        "requestId": "87efdf4506904fa49c7b13a304d9e414",
+        "bizTime": "2026-09-23T16:25:06.15",
+        "createTime": "2026-09-23T16:25:06.13"
+      }
+    ]
+  }
+}

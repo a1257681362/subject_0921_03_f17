@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "message": "OK",
+  "data": {
+    "eventCode": "TICKET_CHECK",
+    "totalDispatches": 4,
+    "successDispatches": 3,
+    "partialDispatches": 1,
+    "failedDispatches": 0,
+    "channels": {
+      "EMAIL": {
+        "SUCCESS": 7,
+        "FAILED": 1,
+        "RETRYING": 0,
+        "SKIPPED": 1,
+        "TOTAL": 9
+      },
+      "INBOX": {
+        "SUCCESS": 9,
+        "FAILED": 0,
+        "RETRYING": 0,
+        "SKIPPED": 0,
+        "TOTAL": 9
+      }
+    }
+  }
+}
